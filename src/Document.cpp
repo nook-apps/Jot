@@ -90,9 +90,38 @@ void Document::setTextDocument(QQuickTextDocument *quickDoc)
     emit modifiedChanged();
 }
 
-QString Document::name() const
+void Document::updateName()
 {
-    return m_path.isEmpty() ? QStringLiteral("Без названия") : QFileInfo(m_path).fileName();
+    QString name;
+    if (!m_path.isEmpty()) {
+        name = QFileInfo(m_path).fileName();
+    } else if (QTextDocument *d = doc()) {
+        // Первая непустая строка без знаков разметки — как у заметок в телефоне
+        static const QRegularExpression markup(QStringLiteral(R"(^\s*(#{1,6}|>|[-*+]|\d+[.)])?\s*(\[[ xX]\]\s*)?)"));
+        static const QRegularExpression emphasis(QStringLiteral("[*_`~=]"));
+        for (QTextBlock b = d->begin(); b.isValid() && name.isEmpty(); b = b.next())
+            name = b.text().remove(markup).remove(emphasis).trimmed();
+        if (name.size() > 40)
+            name = name.left(40).trimmed() + QStringLiteral("…");
+    }
+    if (name.isEmpty())
+        name = QStringLiteral("Без названия");
+    if (name != m_name) {
+        m_name = name;
+        emit nameChanged();
+    }
+}
+
+bool Document::blank() const
+{
+    // По словам, а не по символам: пара пробелов — всё ещё пустая вкладка
+    return m_path.isEmpty() && m_words == 0;
+}
+
+QString Document::text() const
+{
+    QTextDocument *d = doc();
+    return d ? d->toPlainText() : QString();
 }
 
 QString Document::folder() const
@@ -114,6 +143,7 @@ void Document::setPath(const QString &path)
     if (!m_path.isEmpty() && QFileInfo::exists(m_path))
         m_watcher.addPath(m_path);
     emit pathChanged();
+    updateName();
 }
 
 bool Document::load(const QString &rawPath)
@@ -134,6 +164,16 @@ bool Document::load(const QString &rawPath)
     m_crlf = text.contains(QLatin1String("\r\n"));
     if (m_crlf)
         text.replace(QLatin1String("\r\n"), QLatin1String("\n"));
+    replaceText(text, false);
+    setPath(path);
+    setCursorPosition(0);
+    emit loaded(0);
+    return true;
+}
+
+void Document::replaceText(const QString &text, bool modified)
+{
+    QTextDocument *d = doc();
     m_autosaveTimer.stop();
     d->setPlainText(text);
     // Межстрочный — свойство абзаца; новые строки наследуют его от соседней
@@ -143,11 +183,30 @@ bool Document::load(const QString &rawPath)
     bf.setLineHeight(kLineHeight, QTextBlockFormat::ProportionalHeight);
     c.mergeBlockFormat(bf);
     d->clearUndoRedoStacks();
-    d->setModified(false);
-    setPath(path);
-    setCursorPosition(0);
+    d->setModified(modified);
     countWords();
-    emit loaded(0);
+}
+
+bool Document::restore(const QString &path, bool hasDraft, const QString &draft, int cursor)
+{
+    QTextDocument *d = doc();
+    if (!d)
+        return false;
+    // Файл пропал, пока Jot был закрыт, а черновика нет — вкладку не возвращаем
+    if (!path.isEmpty() && !QFileInfo::exists(path) && !hasDraft)
+        return false;
+    if (!path.isEmpty() && QFileInfo::exists(path) && !load(path))
+        return false;
+    if (hasDraft) {
+        replaceText(draft, true);
+        setPath(path);
+        // Черновик файла допишется на диск автосохранением, как если бы сбоя не было
+        if (m_autosave && !m_path.isEmpty())
+            m_autosaveTimer.start();
+    }
+    const int pos = qBound(0, cursor, d->characterCount() - 1);
+    setCursorPosition(pos);
+    emit loaded(pos);
     return true;
 }
 
@@ -263,6 +322,8 @@ void Document::countWords()
         m_words = n;
         emit statsChanged();
     }
+    if (m_path.isEmpty())
+        updateName();
 }
 
 void Document::setPalette(const QVariantMap &p)

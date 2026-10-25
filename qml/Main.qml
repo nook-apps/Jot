@@ -5,9 +5,8 @@ import Jot
 Window {
     id: win
 
-    property string startFile: ""
-
-    readonly property Document doc: editor.document
+    // Файлы из командной строки: открываются вкладками поверх прошлой сессии
+    property var startFiles: []
 
     width: 1000
     height: 720
@@ -18,98 +17,217 @@ Window {
     color: "transparent"
     title: (doc.modified ? "• " : "") + doc.name + " — Jot"
 
-    Component.onCompleted: {
-        doc.load(startFile)
-        editor.focusText()
+    // ── Вкладки ──────────────────────────────────────────────────────
+    // Editor в порядке полоски; tab и doc — текущей вкладки
+    property var tabs: []
+    property Editor tab: null
+    readonly property int current: Math.max(0, tabs.indexOf(tab))
+    readonly property Document doc: tab ? tab.document : stub.document
+
+    // Пустышка на время, пока вкладок ещё нет: привязкам к doc всегда есть что читать
+    Editor { id: stub; visible: false }
+
+    Component {
+        id: editorComp
+        Editor {
+            id: page
+            anchors.fill: parent
+            visible: page === win.tab
+            onChanged: win.saveSession()
+        }
     }
+
+    function newTab() {
+        var ed = editorComp.createObject(pages)
+        ed.document.failed.connect(toast.show)
+        ed.document.changedOnDisk.connect(function () { win.askDisk(ed) })
+        ed.document.load("")
+        var list = tabs.slice()
+        list.splice(current + 1, 0, ed)
+        tabs = list
+        switchTo(ed)
+        return ed
+    }
+    function switchTo(ed) {
+        tab = ed
+        ed.focusText()
+        saveSession()
+    }
+    function tabOf(path) {
+        for (var i = 0; i < tabs.length; ++i)
+            if (tabs[i].document.path === path) return tabs[i]
+        return null
+    }
+    function dropTab(ed) {
+        var i = tabs.indexOf(ed)
+        var list = tabs.slice()
+        list.splice(i, 1)
+        tabs = list
+        if (tab === ed) tab = list.length > 0 ? list[Math.min(i, list.length - 1)] : null
+        ed.destroy()
+        // Последнюю закрыли — остаётся чистый лист, а не пустое окно.
+        // Пока сессия поднимается, пустоту заполнит она сама
+        if (tabs.length === 0) { if (restored) newTab() }
+        else switchTo(tab)
+    }
+    function closeTab(i) {
+        var ed = tabs[i]
+        if (!ed) return
+        var d = ed.document
+        if (!d.modified || (!d.untitled && d.save())) { dropTab(ed); return }
+        switchTo(ed)
+        confirm.ask3("Сохранить «" + d.name + "»?",
+                     d.untitled ? "Документ ещё ни разу не сохранялся." : "Не удалось записать файл.",
+                     "Сохранить…", function () { win.saveAs(ed, function () { win.dropTab(ed) }) },
+                     "Не сохранять", function () { win.dropTab(ed) })
+    }
+    function moveTab(from, to) {
+        var list = tabs.slice()
+        list.splice(to, 0, list.splice(from, 1)[0])
+        tabs = list   // текущая вкладка та же, её номер пересчитается сам
+        saveSession()
+    }
+    function cycleTab(step) { switchTo(tabs[(current + step + tabs.length) % tabs.length]) }
 
     // ── Файлы ────────────────────────────────────────────────────────
-    // Действие, которое ждёт, пока текущий документ будет сохранён или брошен
-    // (новый, открыть другой, закрыть окно)
-    property var afterSave: null
-    property bool closingConfirmed: false
-
-    // Можно ли бросить текущий документ без вопроса. У документа с файлом
-    // правки просто дописываются на диск; спрашиваем только про безымянный
-    // или когда запись не удалась
-    function settle(then) {
-        if (!doc.modified) { then(); return }
-        if (doc.path !== "" && doc.save()) { then(); return }
-        confirm.ask3("Сохранить изменения?",
-                     doc.path === "" ? "Документ ещё ни разу не сохранялся."
-                                     : "Не удалось записать " + doc.name + ".",
-                     "Сохранить…", function () { win.afterSave = then; win.saveAs() },
-                     "Не сохранять", then)
-    }
-
-    function newDoc() {
-        settle(function () { doc.load(""); editor.focusText() })
-    }
-    function openDoc() {
-        settle(function () { FilePortal.open("open", doc.folder) })
-    }
     function openPath(path) {
-        settle(function () { if (doc.load(path)) editor.focusText() })
+        var ed = tabOf(path)
+        if (ed) { switchTo(ed); return }
+        // Чистый безымянный лист занимаем, а не плодим рядом новую вкладку
+        var reuse = tab && tab.document.blank && !tab.document.modified
+        ed = reuse ? tab : newTab()
+        if (ed.document.load(path)) switchTo(ed)
+        else if (!reuse) dropTab(ed)
     }
+    function openDoc() { FilePortal.open("open", doc.folder) }
     function save() {
-        if (doc.path === "") saveAs()
+        if (doc.untitled) saveAs(tab, null)
         else doc.save()
     }
-    function saveAs() {
-        FilePortal.save("saveAs", doc.folder, doc.path === "" ? "Без названия.md" : doc.name)
+    // Сохранить как: окно выбора отвечает позже, запоминаем, для какой вкладки
+    property var saveAsTab: null
+    property var afterSave: null
+    function saveAs(ed, then) {
+        saveAsTab = ed
+        afterSave = then
+        var d = ed.document
+        FilePortal.save("saveAs", d.folder, d.untitled ? d.name.replace(/[\/…]/g, "").trim() + ".md" : d.name)
+    }
+
+    function askDisk(ed) {
+        switchTo(ed)
+        confirm.ask3("Файл изменён снаружи",
+                     ed.document.name + " поменяли в другой программе, а здесь есть несохранённые правки.",
+                     "Загрузить с диска", function () { ed.document.reload() },
+                     "Оставить мои", function () { ed.document.save() })
     }
 
     Connections {
         target: FilePortal
         function onChosen(purpose, paths) {
             if (purpose === "open") {
-                if (doc.load(paths[0])) editor.focusText()
-            } else if (purpose === "saveAs") {
+                paths.forEach(win.openPath)
+            } else if (purpose === "saveAs" && win.saveAsTab) {
                 var path = paths[0]
                 // Расширение подставляем сами, если в окне его стёрли
                 if (path.indexOf(".", path.lastIndexOf("/")) < 0) path += ".md"
-                if (doc.saveAs(path)) {
-                    var then = win.afterSave
-                    win.afterSave = null
+                var then = win.afterSave
+                var ok = win.saveAsTab.document.saveAs(path)
+                win.saveAsTab = null
+                win.afterSave = null
+                if (ok) {
+                    win.saveSession()
                     if (then) then()
                 }
             }
         }
-        function onCancelled(purpose) { win.afterSave = null }
+        function onCancelled(purpose) { win.saveAsTab = null; win.afterSave = null }
         function onFailed(purpose, message) {
+            win.saveAsTab = null
             win.afterSave = null
             toast.show("Окно выбора файлов недоступно: " + message)
         }
     }
 
+    // Другой `jot файл.md` передал файлы сюда
     Connections {
-        target: doc
-        function onFailed(message) { toast.show(message) }
-        function onChangedOnDisk() {
-            confirm.ask3("Файл изменён снаружи",
-                         doc.name + " поменяли в другой программе, а здесь есть несохранённые правки.",
-                         "Загрузить с диска", function () { doc.reload() },
-                         "Оставить мои", function () { doc.save() })
+        target: Instance
+        function onOpenRequested(paths) {
+            paths.forEach(win.openPath)
+            win.raise()
+            win.requestActivate()
         }
     }
 
-    onClosing: (close) => {
-        if (closingConfirmed || !doc.modified) return
-        if (doc.path !== "" && doc.save()) return
-        close.accepted = false
-        settle(function () { win.closingConfirmed = true; win.close() })
+    // ── Сессия ───────────────────────────────────────────────────────
+    // Пишется по ходу работы (на случай сбоя) и при закрытии. Несохранённое —
+    // черновиком: безымянные вкладки переживают закрытие окна без вопросов
+    property bool restored: false
+    function saveSession() { if (restored) sessionTimer.restart() }
+    function writeSession() {
+        sessionTimer.stop()
+        Session.save(tabs.map(function (ed) {
+            var d = ed.document
+            var t = { path: d.path, cursor: d.cursorPosition }
+            if (d.modified && !d.blank) t.draft = d.text()
+            return t
+        }).filter(function (t) { return t.path !== "" || t.draft !== undefined }), current)
+    }
+    Timer { id: sessionTimer; interval: 800; onTriggered: win.writeSession() }
+
+    Component.onCompleted: {
+        var s = Session.load()
+        var want = null
+        ;(s.tabs || []).forEach(function (t, i) {
+            var ed = win.newTab()
+            if (!ed.document.restore(t.path || "", t.draft !== undefined, t.draft || "", t.cursor || 0)) {
+                win.dropTab(ed)
+                return
+            }
+            if (i === s.current) want = ed
+        })
+        if (want) switchTo(want)
+        startFiles.forEach(openPath)
+        if (tabs.length === 0) newTab()
+        restored = true
+        writeSession()
+    }
+
+    onClosing: {
+        // Файлы дописываем на диск, безымянное уходит в сессию черновиком
+        tabs.forEach(function (ed) {
+            if (ed.document.modified && !ed.document.untitled) ed.document.save()
+        })
+        writeSession()
     }
 
     // ── Клавиши ──────────────────────────────────────────────────────
-    Shortcut { sequences: [StandardKey.New]; onActivated: win.newDoc() }
+    Shortcut { sequences: [StandardKey.New, "Ctrl+T"]; onActivated: win.newTab() }
     Shortcut { sequences: [StandardKey.Open]; onActivated: win.openDoc() }
     Shortcut { sequences: [StandardKey.Save]; onActivated: win.save() }
-    Shortcut { sequence: "Ctrl+Shift+S"; onActivated: win.saveAs() }
+    Shortcut { sequence: "Ctrl+Shift+S"; onActivated: win.saveAs(win.tab, null) }
+    Shortcut { sequences: ["Ctrl+W", "Ctrl+F4"]; onActivated: win.closeTab(win.current) }
+    Shortcut { sequences: ["Ctrl+Tab", "Ctrl+PgDown"]; onActivated: win.cycleTab(1) }
+    Shortcut { sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab", "Ctrl+PgUp"]; onActivated: win.cycleTab(-1) }
     Shortcut { sequence: "Ctrl+Q"; onActivated: win.close() }
-    Shortcut { sequence: "Ctrl+B"; onActivated: editor.wrap("**") }
-    Shortcut { sequence: "Ctrl+I"; onActivated: editor.wrap("*") }
-    Shortcut { sequence: "Ctrl+E"; onActivated: editor.wrap("`") }
-    Shortcut { sequence: "Ctrl+Shift+X"; onActivated: editor.wrap("~~") }
+    Shortcut { sequence: "Ctrl+B"; onActivated: win.tab.wrap("**") }
+    Shortcut { sequence: "Ctrl+I"; onActivated: win.tab.wrap("*") }
+    Shortcut { sequence: "Ctrl+E"; onActivated: win.tab.wrap("`") }
+    Shortcut { sequence: "Ctrl+Shift+X"; onActivated: win.tab.wrap("~~") }
+    // Alt+1…8 — вкладка по номеру, Alt+9 — последняя
+    Repeater {
+        model: 9
+        Item {
+            required property int index
+            Shortcut {
+                sequence: "Alt+" + (parent.index + 1)
+                onActivated: {
+                    var i = parent.index === 8 ? win.tabs.length - 1 : parent.index
+                    if (i < win.tabs.length) win.switchTo(win.tabs[i])
+                }
+            }
+        }
+    }
 
     // ── Вид ──────────────────────────────────────────────────────────
     Rectangle {
@@ -122,46 +240,38 @@ Window {
         anchors.fill: parent
         spacing: 0
 
-        // Верхняя полоса: файл слева, имя документа по центру
-        Item {
+        // Верхняя полоса: открыть и сохранить, дальше вкладки
+        RowLayout {
             Layout.fillWidth: true
             Layout.preferredHeight: 46
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            spacing: 2
 
-            Row {
-                anchors { left: parent.left; leftMargin: 10; verticalCenter: parent.verticalCenter }
-                spacing: 2
-                GlassButton { text: "\u{f016}"; tooltip: "Новый  Ctrl+N"; onClicked: win.newDoc() }
-                GlassButton { text: "\u{f07c}"; tooltip: "Открыть  Ctrl+O"; onClicked: win.openDoc() }
-                GlassButton {
-                    text: "\u{f0c7}"
-                    tooltip: "Сохранить  Ctrl+S"
-                    accentColor: Theme.jot
-                    active: doc.modified
-                    onClicked: win.save()
-                }
+            GlassButton { text: "\u{f07c}"; tooltip: "Открыть  Ctrl+O"; onClicked: win.openDoc() }
+            GlassButton {
+                text: "\u{f0c7}"
+                tooltip: "Сохранить  Ctrl+S"
+                accentColor: Theme.jot
+                active: win.doc.modified
+                onClicked: win.save()
             }
-
-            Row {
-                anchors.centerIn: parent
-                spacing: 8
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: doc.name
-                    color: Theme.text
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideMiddle
-                    width: Math.min(implicitWidth, win.width - 320)
-                }
-                // Несохранённые правки — фиолетовая точка, как у вкладок редакторов
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 7; height: 7; radius: 3.5
-                    color: Theme.jot
-                    opacity: doc.modified ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: Theme.animDuration } }
-                }
+            Rectangle {
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 20
+                Layout.leftMargin: 6
+                Layout.rightMargin: 6
+                color: Theme.ink(0.12)
+            }
+            TabStrip {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 34
+                tabs: win.tabs
+                currentTab: win.tab
+                onActivate: (i) => win.switchTo(win.tabs[i])
+                onCloseTab: (i) => win.closeTab(i)
+                onMoveTab: (from, to) => win.moveTab(from, to)
+                onNewTab: win.newTab()
             }
         }
 
@@ -171,8 +281,9 @@ Window {
             color: Theme.ink(0.08)
         }
 
-        Editor {
-            id: editor
+        // Все вкладки живут здесь, видна только текущая
+        Item {
+            id: pages
             Layout.fillWidth: true
             Layout.fillHeight: true
         }
@@ -185,7 +296,7 @@ Window {
             Text {
                 anchors { left: parent.left; leftMargin: 16; right: stats.left; rightMargin: 16
                           verticalCenter: parent.verticalCenter }
-                text: doc.path === "" ? "не сохранён" : doc.path.replace(/^\/home\/[^/]+/, "~")
+                text: win.doc.untitled ? "не сохранён" : win.doc.path.replace(/^\/home\/[^/]+/, "~")
                 color: Theme.overlay1
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSize - 3
@@ -194,12 +305,25 @@ Window {
             Text {
                 id: stats
                 anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-                text: doc.words + " " + win.plural(doc.words, "слово", "слова", "слов")
-                      + "   ·   " + doc.line + ":" + doc.column
+                text: win.doc.words + " " + win.plural(win.doc.words, "слово", "слова", "слов")
+                      + "   ·   " + win.doc.line + ":" + win.doc.column
                 color: Theme.overlay1
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSize - 3
             }
+        }
+    }
+
+    // Файлы, брошенные в окно (из Shelf), открываются вкладками
+    DropArea {
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+        onDropped: (drop) => {
+            drop.urls.forEach(function (u) {
+                var s = u.toString()
+                if (s.startsWith("file://")) win.openPath(decodeURIComponent(s.substring(7)))
+            })
+            drop.acceptProposedAction()
         }
     }
 

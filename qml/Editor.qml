@@ -2,14 +2,17 @@ import QtQuick
 import QtQuick.Controls.Basic
 import Jot
 
-// Поле редактора: колонка текста по центру окна, прокрутка — на всю ширину,
-// чтобы колесо работало и над полями. Подсветку, файл и курсорную строку
-// ведёт Document
+// Поле редактора — одна вкладка: колонка текста по центру окна, прокрутка — на всю
+// ширину, чтобы колесо работало и над полями. Подсветку, файл и курсорную строку
+// ведёт Document. У каждой вкладки свой TextArea — и своя история правок
 FocusScope {
     id: root
 
     readonly property Document document: doc
     readonly property alias area: edit
+
+    // Текст или курсор сдвинулись — окну пора записать сессию
+    signal changed()
 
     function wrap(marker) {
         var r = doc.toggleWrap(edit.selectionStart, edit.selectionEnd, marker)
@@ -41,6 +44,9 @@ FocusScope {
             edit.cursorPosition = cursor
             edit.deselect()
         }
+        function onCursorChanged() { root.changed() }
+        // Автосохранение сняло «изменён» — черновик в сессии больше не нужен
+        function onModifiedChanged() { root.changed() }
     }
 
     ScrollView {
@@ -71,6 +77,7 @@ FocusScope {
             selectedTextColor: Theme.text
             placeholderText: "Начните писать…"
             placeholderTextColor: Theme.overlay1
+            onTextChanged: root.changed()
 
             // Фирменный курсор: тонкая фиолетовая черта, мигает мягко
             cursorDelegate: Rectangle {

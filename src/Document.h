@@ -21,7 +21,11 @@ class Document : public QObject
     Q_PROPERTY(QQuickTextDocument *textDocument READ textDocument WRITE setTextDocument NOTIFY textDocumentChanged)
     // Пустой — новый, ещё не сохранённый документ
     Q_PROPERTY(QString path READ path NOTIFY pathChanged)
-    Q_PROPERTY(QString name READ name NOTIFY pathChanged)
+    // Имя файла; у безымянного — первая строка текста, без разметки
+    Q_PROPERTY(QString name READ name NOTIFY nameChanged)
+    Q_PROPERTY(bool untitled READ untitled NOTIFY pathChanged)
+    // Безымянный и без текста — такую вкладку можно занять под открываемый файл
+    Q_PROPERTY(bool blank READ blank NOTIFY statsChanged)
     Q_PROPERTY(QString folder READ folder NOTIFY pathChanged)
     Q_PROPERTY(bool modified READ modified NOTIFY modifiedChanged)
     // Сохраняется сам через паузу в наборе; только у документов с файлом
@@ -42,7 +46,9 @@ public:
     QQuickTextDocument *textDocument() const { return m_quickDoc; }
     void setTextDocument(QQuickTextDocument *doc);
     QString path() const { return m_path; }
-    QString name() const;
+    QString name() const { return m_name; }
+    bool untitled() const { return m_path.isEmpty(); }
+    bool blank() const;
     QString folder() const;
     bool modified() const;
     int cursorPosition() const { return m_cursor; }
@@ -63,6 +69,10 @@ public:
     Q_INVOKABLE bool saveAs(const QString &path);
     // Перечитать с диска, бросив правки
     Q_INVOKABLE bool reload();
+    // Вернуть вкладку из сессии: файл (или безымянный, если path пуст) с несохранённым
+    // черновиком поверх. Курсор — куда был
+    Q_INVOKABLE bool restore(const QString &path, bool hasDraft, const QString &draft, int cursor);
+    Q_INVOKABLE QString text() const;
 
     // Enter в пункте списка или цитате: продолжить разметку на новой строке,
     // пустой пункт — убрать маркер. Возвращает новую позицию курсора или -1,
@@ -75,6 +85,7 @@ public:
 signals:
     void textDocumentChanged();
     void pathChanged();
+    void nameChanged();
     void modifiedChanged();
     void autosaveChanged();
     void cursorChanged();
@@ -92,6 +103,9 @@ signals:
 private:
     QTextDocument *doc() const;
     void setPath(const QString &path);
+    // Заменить весь текст: межстрочный, сброс undo; modified — как велено
+    void replaceText(const QString &text, bool modified);
+    void updateName();
     bool writeTo(const QString &path);
     void fileChangedOnDisk();
     void countWords();
@@ -99,10 +113,9 @@ private:
     QPointer<QQuickTextDocument> m_quickDoc;
     MarkdownHighlighter *m_highlighter = nullptr;
     QString m_path;
+    QString m_name;
     bool m_crlf = false;
     bool m_autosave = true;
-    // Сами пишем файл — следующее изменение на диске наше, а не чужое
-    bool m_writing = false;
     int m_revision = -1;
     int m_cursor = 0;
     int m_words = 0;

@@ -1,3 +1,5 @@
+#include "Instance.h"
+
 #include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
@@ -44,15 +46,23 @@ int main(int argc, char *argv[])
     // Свои контролы рисуем сами; Basic не тянет вид qt6ct/kvantum
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    // jot [файл] — нет такого файла — откроется пустой с этим именем, создастся при сохранении
-    QString start = app.arguments().value(1);
-    if (start.startsWith(QLatin1String("file://")))
-        start = QUrl(start).toLocalFile();
-    if (!start.isEmpty())
-        start = QFileInfo(start).absoluteFilePath();
+    // jot [файлы…] — нет такого файла — откроется пустой с этим именем, создастся при сохранении
+    QStringList files;
+    for (QString arg : app.arguments().mid(1)) {
+        if (arg.startsWith(QLatin1String("file://")))
+            arg = QUrl(arg).toLocalFile();
+        if (!arg.isEmpty() && !arg.startsWith(QLatin1Char('-')))
+            files << QFileInfo(arg).absoluteFilePath();
+    }
+
+    // Окно уже открыто — файлы уходят к нему вкладками
+    if (Instance::forward(files))
+        return 0;
+    Instance instance(nullptr);
+    instance.registerOnBus();
 
     QQmlApplicationEngine engine;
-    engine.setInitialProperties({{QStringLiteral("startFile"), start}});
+    engine.setInitialProperties({{QStringLiteral("startFiles"), files}});
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] { QCoreApplication::exit(1); },
                      Qt::QueuedConnection);
     engine.loadFromModule("Jot", "Main");

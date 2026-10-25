@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Jot
+GenericName=Markdown Editor
+GenericName[ru]=Редактор Markdown
+Comment=Write notes and documents in Markdown
+Comment[ru]=Заметки и документы в Markdown
+# Полный путь: у Hyprland в PATH нет ~/.local/bin, лаунчеры шелла запускают через него
+Exec=@CMAKE_INSTALL_FULL_BINDIR@/jot %f
+Icon=org.stasyao.jot
+Terminal=false
+Categories=Office;TextEditor;Utility;
+MimeType=text/markdown;text/x-markdown;
+StartupWMClass=org.stasyao.jot
+Keywords=jot;markdown;md;заметки;редактор;notes;editor;

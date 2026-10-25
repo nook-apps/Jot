@@ -20,6 +20,7 @@ set(QML_FILES
     qml/Theme.qml
     qml/Editor.qml
     qml/TabStrip.qml
+    qml/Sidebar.qml
     qml/GlassButton.qml
     qml/GlassDialog.qml
     qml/TextButton.qml
@@ -47,6 +48,7 @@ qt_add_qml_module(jot
         src/FilePortal.h src/FilePortal.cpp
         src/Session.h src/Session.cpp
         src/Instance.h src/Instance.cpp
+        src/FolderModel.h src/FolderModel.cpp
 )
 
 # QML компилируется только в байт-код, без C++ для привязок (AOT): сгенерированный C++

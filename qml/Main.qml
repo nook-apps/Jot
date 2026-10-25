@@ -24,6 +24,44 @@ Window {
     readonly property int current: Math.max(0, tabs.indexOf(tab))
     readonly property Document doc: tab ? tab.document : stub.document
 
+    // ── Панель папки ─────────────────────────────────────────────────
+    // Показывает папку открытого документа; выбранная явно (Ctrl+Shift+O, jot ~/notes)
+    // закрепляется и больше не следует за документами — режим хранилища
+    FolderModel { id: folders }
+    property bool folderPinned: false
+    // undefined — по ширине окна; F9 закрепляет выбор, как в Shelf
+    property var sidebarShown: undefined
+    readonly property bool sidebarVisible: sidebarShown ?? width >= 760
+    readonly property string docPath: doc.path
+    onDocPathChanged: followDoc()
+
+    function inside(path, dir) { return dir !== "" && (path === dir || path.startsWith(dir + "/")) }
+    function followDoc() {
+        if (folderPinned || doc.untitled) return
+        if (!inside(doc.path, folders.root)) folders.root = doc.folder
+    }
+    function openFolder(path, pin) {
+        folders.root = path
+        folderPinned = pin
+        if (!sidebarVisible) sidebarShown = true
+        saveSession()
+    }
+    function togglePin() {
+        folderPinned = !folderPinned
+        followDoc()
+        saveSession()
+    }
+    function newNote() {
+        var p = folders.createNote("")
+        if (p) openPath(p)
+        else toast.show("Не удалось создать заметку в " + folders.rootName)
+    }
+    Connections {
+        target: folders
+        function onRootChanged() { win.saveSession() }
+        function onExpandedChanged() { win.saveSession() }
+    }
+
     // Пустышка на время, пока вкладок ещё нет: привязкам к doc всегда есть что читать
     Editor { id: stub; visible: false }
 
@@ -91,6 +129,7 @@ Window {
 
     // ── Файлы ────────────────────────────────────────────────────────
     function openPath(path) {
+        if (folders.isDir(path)) { openFolder(path, true); return }
         var ed = tabOf(path)
         if (ed) { switchTo(ed); return }
         // Чистый безымянный лист занимаем, а не плодим рядом новую вкладку
@@ -127,6 +166,8 @@ Window {
         function onChosen(purpose, paths) {
             if (purpose === "open") {
                 paths.forEach(win.openPath)
+            } else if (purpose === "folder") {
+                win.openFolder(paths[0], true)
             } else if (purpose === "saveAs" && win.saveAsTab) {
                 var path = paths[0]
                 // Расширение подставляем сами, если в окне его стёрли
@@ -171,12 +212,22 @@ Window {
             var t = { path: d.path, cursor: d.cursorPosition }
             if (d.modified && !d.blank) t.draft = d.text()
             return t
-        }).filter(function (t) { return t.path !== "" || t.draft !== undefined }), current)
+        }).filter(function (t) { return t.path !== "" || t.draft !== undefined }), current, {
+            folder: folders.root,
+            pinned: folderPinned,
+            expanded: folders.expanded,
+            // null — «по ширине окна»: undefined в JSON не попадает
+            sidebar: sidebarShown === undefined ? null : sidebarShown
+        })
     }
     Timer { id: sessionTimer; interval: 800; onTriggered: win.writeSession() }
 
     Component.onCompleted: {
         var s = Session.load()
+        folders.expanded = s.expanded || []
+        folders.root = s.folder || ""
+        folderPinned = !!s.pinned
+        if (s.sidebar !== undefined && s.sidebar !== null) sidebarShown = s.sidebar
         var want = null
         ;(s.tabs || []).forEach(function (t, i) {
             var ed = win.newTab()
@@ -210,6 +261,8 @@ Window {
     Shortcut { sequences: ["Ctrl+Tab", "Ctrl+PgDown"]; onActivated: win.cycleTab(1) }
     Shortcut { sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab", "Ctrl+PgUp"]; onActivated: win.cycleTab(-1) }
     Shortcut { sequence: "Ctrl+Q"; onActivated: win.close() }
+    Shortcut { sequence: "F9"; onActivated: { win.sidebarShown = !win.sidebarVisible; win.saveSession() } }
+    Shortcut { sequence: "Ctrl+Shift+O"; onActivated: FilePortal.openFolder("folder", folders.root || win.doc.folder) }
     Shortcut { sequence: "Ctrl+B"; onActivated: win.tab.wrap("**") }
     Shortcut { sequence: "Ctrl+I"; onActivated: win.tab.wrap("*") }
     Shortcut { sequence: "Ctrl+E"; onActivated: win.tab.wrap("`") }
@@ -236,80 +289,108 @@ Window {
         Behavior on color { ColorAnimation { duration: 300 } }
     }
 
-    ColumnLayout {
+    RowLayout {
         anchors.fill: parent
         spacing: 0
 
-        // Верхняя полоса: открыть и сохранить, дальше вкладки
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 46
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            spacing: 2
-
-            GlassButton { text: "\u{f07c}"; tooltip: "Открыть  Ctrl+O"; onClicked: win.openDoc() }
-            GlassButton {
-                text: "\u{f0c7}"
-                tooltip: "Сохранить  Ctrl+S"
-                accentColor: Theme.jot
-                active: win.doc.modified
-                onClicked: win.save()
-            }
-            Rectangle {
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 20
-                Layout.leftMargin: 6
-                Layout.rightMargin: 6
-                color: Theme.ink(0.12)
-            }
-            TabStrip {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 34
-                tabs: win.tabs
-                currentTab: win.tab
-                onActivate: (i) => win.switchTo(win.tabs[i])
-                onCloseTab: (i) => win.closeTab(i)
-                onMoveTab: (from, to) => win.moveTab(from, to)
-                onNewTab: win.newTab()
-            }
+        Sidebar {
+            // Прячется и появляется, плавно меняя ширину, как в Shelf
+            Layout.preferredWidth: win.sidebarVisible ? 250 : 0
+            Behavior on Layout.preferredWidth { NumberAnimation { duration: Theme.dur(200); easing.type: Easing.OutCubic } }
+            Layout.fillHeight: true
+            visible: Layout.preferredWidth > 0.5
+            clip: true
+            model: folders
+            pinned: win.folderPinned
+            currentPath: win.doc.path
+            onOpenFile: (p) => win.openPath(p)
+            onChooseFolder: FilePortal.openFolder("folder", folders.root || win.doc.folder)
+            onNewNote: win.newNote()
+            onTogglePin: win.togglePin()
         }
-
         Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 1
+            Layout.preferredWidth: 1
+            Layout.fillHeight: true
+            visible: win.sidebarVisible
             color: Theme.ink(0.08)
         }
 
-        // Все вкладки живут здесь, видна только текущая
-        Item {
-            id: pages
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-        }
+            spacing: 0
 
-        // Строка состояния: где файл, сколько слов, где курсор
-        Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 28
+            // Верхняя полоса: открыть и сохранить, дальше вкладки
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 46
+                Layout.leftMargin: 10
+                Layout.rightMargin: 10
+                spacing: 2
 
-            Text {
-                anchors { left: parent.left; leftMargin: 16; right: stats.left; rightMargin: 16
-                          verticalCenter: parent.verticalCenter }
-                text: win.doc.untitled ? "не сохранён" : win.doc.path.replace(/^\/home\/[^/]+/, "~")
-                color: Theme.overlay1
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 3
-                elide: Text.ElideMiddle
+                GlassButton { text: "\u{f07c}"; tooltip: "Открыть  Ctrl+O"; onClicked: win.openDoc() }
+                GlassButton {
+                    text: "\u{f0c7}"
+                    tooltip: "Сохранить  Ctrl+S"
+                    accentColor: Theme.jot
+                    active: win.doc.modified
+                    onClicked: win.save()
+                }
+                Rectangle {
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: 20
+                    Layout.leftMargin: 6
+                    Layout.rightMargin: 6
+                    color: Theme.ink(0.12)
+                }
+                TabStrip {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    tabs: win.tabs
+                    currentTab: win.tab
+                    onActivate: (i) => win.switchTo(win.tabs[i])
+                    onCloseTab: (i) => win.closeTab(i)
+                    onMoveTab: (from, to) => win.moveTab(from, to)
+                    onNewTab: win.newTab()
+                }
             }
-            Text {
-                id: stats
-                anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
-                text: win.doc.words + " " + win.plural(win.doc.words, "слово", "слова", "слов")
-                      + "   ·   " + win.doc.line + ":" + win.doc.column
-                color: Theme.overlay1
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.fontSize - 3
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: Theme.ink(0.08)
+            }
+
+            // Все вкладки живут здесь, видна только текущая
+            Item {
+                id: pages
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+            }
+
+            // Строка состояния: где файл, сколько слов, где курсор
+            Item {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 28
+
+                Text {
+                    anchors { left: parent.left; leftMargin: 16; right: stats.left; rightMargin: 16
+                              verticalCenter: parent.verticalCenter }
+                    text: win.doc.untitled ? "не сохранён" : win.doc.path.replace(/^\/home\/[^/]+/, "~")
+                    color: Theme.overlay1
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize - 3
+                    elide: Text.ElideMiddle
+                }
+                Text {
+                    id: stats
+                    anchors { right: parent.right; rightMargin: 16; verticalCenter: parent.verticalCenter }
+                    text: win.doc.words + " " + win.plural(win.doc.words, "слово", "слова", "слов")
+                          + "   ·   " + win.doc.line + ":" + win.doc.column
+                    color: Theme.overlay1
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fontSize - 3
+                }
             }
         }
     }

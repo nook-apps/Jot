@@ -99,6 +99,12 @@ void FilePortal::open(const QString &purpose, const QString &folder)
              {QStringLiteral("filters"), QVariant::fromValue(markdownFilters())}});
 }
 
+void FilePortal::openFolder(const QString &purpose, const QString &folder)
+{
+    request(QStringLiteral("OpenFile"), purpose, QStringLiteral("Папка с заметками"),
+            {{QStringLiteral("directory"), true}, {QStringLiteral("current_folder"), folderBytes(folder)}});
+}
+
 void FilePortal::save(const QString &purpose, const QString &folder, const QString &name)
 {
     request(QStringLiteral("SaveFile"), purpose, QStringLiteral("Сохранить"),

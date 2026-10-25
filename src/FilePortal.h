@@ -22,6 +22,8 @@ public:
 
     Q_INVOKABLE void open(const QString &purpose, const QString &folder);
     Q_INVOKABLE void save(const QString &purpose, const QString &folder, const QString &name);
+    // Выбрать папку (для панели заметок)
+    Q_INVOKABLE void openFolder(const QString &purpose, const QString &folder);
 
 signals:
     void chosen(const QString &purpose, const QStringList &paths);

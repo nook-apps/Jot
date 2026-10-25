@@ -17,9 +17,10 @@ class Session : public QObject
 public:
     explicit Session(QObject *parent = nullptr);
 
-    // tabs — [{ path, cursor, draft? }], current — номер текущей
-    Q_INVOKABLE void save(const QVariantList &tabs, int current);
-    // { tabs, current } или пусто, если сессии нет
+    // tabs — [{ path, cursor, draft? }], current — номер текущей,
+    // extra — остальное состояние окна (панель папки: folder, pinned, expanded, sidebar)
+    Q_INVOKABLE void save(const QVariantList &tabs, int current, const QVariantMap &extra = {});
+    // { tabs, current, …extra } или пусто, если сессии нет
     Q_INVOKABLE QVariantMap load() const;
 
 private:

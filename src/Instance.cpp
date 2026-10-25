@@ -6,9 +6,9 @@
 #include <QJSEngine>
 
 namespace {
-const QString kService = QStringLiteral("org.stasyao.jot");
-const QString kPath = QStringLiteral("/org/stasyao/jot");
-const QString kInterface = QStringLiteral("org.stasyao.jot.Instance");
+const QString kService = QStringLiteral("io.github.nook_apps.Jot");
+const QString kPath = QStringLiteral("/io/github/nook_apps/Jot");
+const QString kInterface = QStringLiteral("io.github.nook_apps.Jot.Instance");
 
 Instance *s_instance = nullptr;
 }

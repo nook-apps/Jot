@@ -26,9 +26,9 @@ int main(int argc, char *argv[])
     app.setApplicationVersion(QStringLiteral(JOT_VERSION));
 
     // Становится app_id окна в Wayland — по нему Hyprland и .desktop узнают приложение
-    app.setDesktopFileName(QStringLiteral("org.stasyao.jot"));
-    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("org.stasyao.jot"),
-                                       QIcon(QStringLiteral(":/qt/qml/Jot/data/icons/org.stasyao.jot.svg"))));
+    app.setDesktopFileName(QStringLiteral("io.github.nook_apps.Jot"));
+    app.setWindowIcon(QIcon::fromTheme(QStringLiteral("io.github.nook_apps.Jot"),
+                                       QIcon(QStringLiteral(":/qt/qml/Jot/data/icons/io.github.nook_apps.Jot.svg"))));
 
     // Значки интерфейса — вшитые символы Nerd Font: не зависим от установленных шрифтов
     QFontDatabase::addApplicationFont(QStringLiteral(":/qt/qml/Jot/fonts/JotIcons.ttf"));

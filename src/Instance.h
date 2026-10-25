@@ -7,7 +7,7 @@
 class QJSEngine;
 class QQmlEngine;
 
-// Одно окно Jot на сеанс. Первый запуск занимает имя org.stasyao.jot на шине;
+// Одно окно Jot на сеанс. Первый запуск занимает имя io.github.nook_apps.Jot на шине;
 // следующие `jot файл.md` (двойной щелчок в Shelf, xdg-open) передают файлы ему
 // и выходят — файлы открываются вкладками в уже открытом окне
 class Instance : public QObject
@@ -15,7 +15,7 @@ class Instance : public QObject
     Q_OBJECT
     QML_ELEMENT
     QML_SINGLETON
-    Q_CLASSINFO("D-Bus Interface", "org.stasyao.jot.Instance")
+    Q_CLASSINFO("D-Bus Interface", "io.github.nook_apps.Jot.Instance")
 
 public:
     // Без значения по умолчанию намеренно: у типа с конструктором по умолчанию

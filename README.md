@@ -1,10 +1,12 @@
 <div align="center">
 
-<img src="data/icons/org.stasyao.jot.svg" alt="" width="112">
+<img src="data/icons/io.github.nook_apps.Jot.svg" alt="" width="112">
 
 # Jot
 
 **Markdown-редактор для Hyprland в стиле глассморфизма — на Qt 6 / QML**
+
+Часть офисного пакета Plain от студии [Nook](https://github.com/nook-apps)
 
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C?style=for-the-badge&logo=cplusplus&logoColor=white)
 ![Qt 6](https://img.shields.io/badge/Qt-6.7%2B-41CD52?style=for-the-badge&logo=qt&logoColor=white)
@@ -29,9 +31,9 @@
 
 ## ✨ Зачем
 
-Jot — первое приложение офисного пакета **Plain** (Jot, Page, Grid, Deck) и сосед файлового
-менеджера [Shelf](https://github.com/Stasyao37/shelf): тот же стеклянный вид, те же цвета из
-обоев, свой `app_id` и `.desktop`. Редактор для заметок и документов в Markdown, который
+Jot — первое приложение офисного пакета **Plain** (Jot, Page, Grid, Deck) от студии **Nook** и
+сосед файлового менеджера [Shelf](https://github.com/Stasyao37/shelf): тот же визуальный язык
+Glaze — стекло, цвета из обоев, одна деталь с наклоном, — свой `app_id` и `.desktop`. Редактор для заметок и документов в Markdown, который
 выглядит частью рабочего стола на Hyprland, а не гостем из GNOME или KDE.
 
 **Живой исходник.** Файл остаётся обычным markdown — никакого скрытого формата и отдельного
@@ -133,7 +135,7 @@ cmake --install build
 Сделать Jot редактором Markdown по умолчанию:
 
 ```sh
-xdg-mime default org.stasyao.jot.desktop text/markdown
+xdg-mime default io.github.nook_apps.Jot.desktop text/markdown
 ```
 
 > [!NOTE]

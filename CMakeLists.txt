@@ -39,7 +39,7 @@ qt_add_qml_module(jot
     QML_FILES ${QML_FILES}
     RESOURCES
         fonts/JotIcons.ttf fonts/JotIconsPropo.ttf
-        data/icons/org.stasyao.jot.svg
+        data/icons/io.github.nook_apps.Jot.svg
     SOURCES
         src/ThemeSource.h src/ThemeSource.cpp
         src/Document.h src/Document.cpp
@@ -59,6 +59,6 @@ target_compile_options(jot PRIVATE -Wall -Wextra)
 
 include(GNUInstallDirs)
 install(TARGETS jot RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-configure_file(data/org.stasyao.jot.desktop.in org.stasyao.jot.desktop @ONLY)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/org.stasyao.jot.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
-install(FILES data/icons/org.stasyao.jot.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)
+configure_file(data/io.github.nook_apps.Jot.desktop.in io.github.nook_apps.Jot.desktop @ONLY)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/io.github.nook_apps.Jot.desktop DESTINATION ${CMAKE_INSTALL_DATADIR}/applications)
+install(FILES data/icons/io.github.nook_apps.Jot.svg DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps)

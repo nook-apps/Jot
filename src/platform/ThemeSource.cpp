@@ -1,8 +1,5 @@
 #include "ThemeSource.h"
 
-#include <QDBusConnection>
-#include <QDBusInterface>
-#include <QDBusReply>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -10,9 +7,18 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QSettings>
+#include <QGuiApplication>
 #include <QStandardPaths>
+#include <QStyleHints>
+
+#ifdef JOT_HAVE_DBUS
+#include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusReply>
+#endif
 
 namespace {
+#ifdef JOT_HAVE_DBUS
 const QString kPortalService = QStringLiteral("org.freedesktop.portal.Desktop");
 const QString kPortalPath = QStringLiteral("/org/freedesktop/portal/desktop");
 const QString kPortalSettings = QStringLiteral("org.freedesktop.portal.Settings");
@@ -23,6 +29,7 @@ QDBusConnection portalBus()
 {
     return QDBusConnection::connectToBus(QDBusConnection::SessionBus, QStringLiteral("jot-theme"));
 }
+#endif
 
 QString stateDir()
 {
@@ -109,8 +116,16 @@ ThemeSource::ThemeSource(QObject *parent)
     connect(&m_watcher, &QFileSystemWatcher::directoryChanged, &m_debounce, qOverload<>(&QTimer::start));
 
     readSystemScheme();
-    portalBus().connect(kPortalService, kPortalPath, kPortalSettings, QStringLiteral("SettingChanged"),
-                                          this, SLOT(portalSettingChanged(QString, QString, QDBusVariant)));
+#ifdef JOT_HAVE_DBUS
+    if (m_portalScheme)
+        portalBus().connect(kPortalService, kPortalPath, kPortalSettings, QStringLiteral("SettingChanged"), this,
+                            SLOT(portalSettingChanged(QString, QString, QDBusVariant)));
+#endif
+    // Без портала (Windows, Linux без xdg-desktop-portal) светлую и тёмную
+    // сообщает сам Qt — и о смене темы в системе тоже
+    if (!m_portalScheme)
+        connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, this,
+                [this](Qt::ColorScheme scheme) { setSystemDark(scheme != Qt::ColorScheme::Light); });
     load();
 }
 
@@ -268,8 +283,17 @@ void ThemeSource::resetGlass()
     emit changed(); // флаг glassOverridden сменился, даже если стекло осталось тем же
 }
 
+void ThemeSource::setSystemDark(bool dark)
+{
+    if (dark == m_systemDark)
+        return;
+    m_systemDark = dark;
+    load();
+}
+
 void ThemeSource::readSystemScheme()
 {
+#ifdef JOT_HAVE_DBUS
     QDBusInterface portal(kPortalService, kPortalPath, kPortalSettings, portalBus());
     portal.setTimeout(500);
     // 1 — тёмная, 2 — светлая, 0 — без предпочтения (берём тёмную, как у шелла)
@@ -277,27 +301,35 @@ void ThemeSource::readSystemScheme()
                                                QStringLiteral("color-scheme"));
     uint scheme = 0;
     if (one.isValid()) {
+        m_portalScheme = true;
         scheme = one.value().variant().toUInt();
     } else {
         // Старые порталы: Read и значение, завёрнутое в ещё один variant
         QDBusReply<QDBusVariant> old = portal.call(QStringLiteral("Read"), QStringLiteral("org.freedesktop.appearance"),
                                                    QStringLiteral("color-scheme"));
-        if (old.isValid())
+        if (old.isValid()) {
+            m_portalScheme = true;
             scheme = qvariant_cast<QDBusVariant>(old.value().variant()).variant().toUInt();
+        }
     }
-    m_systemDark = scheme != 2;
+    if (m_portalScheme) {
+        m_systemDark = scheme != 2;
+        return;
+    }
+#endif
+    // Неизвестно — тёмная, как у шелла
+    m_systemDark = QGuiApplication::styleHints()->colorScheme() != Qt::ColorScheme::Light;
 }
+
+#ifdef JOT_HAVE_DBUS
 
 void ThemeSource::portalSettingChanged(const QString &ns, const QString &key, const QDBusVariant &value)
 {
     if (ns != QLatin1String("org.freedesktop.appearance") || key != QLatin1String("color-scheme"))
         return;
-    const bool dark = value.variant().toUInt() != 2;
-    if (dark == m_systemDark)
-        return;
-    m_systemDark = dark;
-    load();
+    setSystemDark(value.variant().toUInt() != 2);
 }
+#endif
 
 void ThemeSource::rewatch()
 {

@@ -1,12 +1,15 @@
 #pragma once
 
-#include <QDBusVariant>
 #include <QFileSystemWatcher>
 #include <QObject>
 #include <QTimer>
 #include <QVariantList>
 #include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
+
+#ifdef JOT_HAVE_DBUS
+#include <QDBusVariant>
+#endif
 
 // Откуда брать цвета и стекло. Палитра отдаётся в именах шелла (base, surface0,
 // lavender…), логика — в Theme.qml, как в Quickshell, чтобы QML переносился без правок.
@@ -61,14 +64,17 @@ public:
 signals:
     void changed();
 
+#ifdef JOT_HAVE_DBUS
 private Q_SLOTS:
     // org.freedesktop.portal.Settings.SettingChanged
     void portalSettingChanged(const QString &ns, const QString &key, const QDBusVariant &value);
+#endif
 
 private:
     void load();
     void rewatch();
     void readSystemScheme();
+    void setSystemDark(bool dark);
     QVariantMap paletteFor(const QString &id) const;
     QVariantMap glassSettings();
     bool fileUsable(const QString &id) const;
@@ -77,6 +83,8 @@ private:
     QVariantMap m_settings;
     QString m_source;
     bool m_systemDark = true;
+    // Светлую/тёмную сообщил портал — тогда его и слушаем, а не Qt
+    bool m_portalScheme = false;
     int m_hyprBlur = -1; // -1 — ещё не спрашивали hyprctl
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;

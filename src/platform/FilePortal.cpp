@@ -1,7 +1,11 @@
 #include "FilePortal.h"
 
+#include <QTimer>
+
+#ifdef JOT_HAVE_DBUS
 #include <QDBusArgument>
 #include <QDBusConnection>
+#include <QDBusContext>
 #include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusPendingCallWatcher>
@@ -82,13 +86,37 @@ QByteArray folderBytes(const QString &folder)
 }
 }
 
+// Ответ портала приходит сигналом Response на объект запроса. По какому именно
+// запросу — видно только из самого сообщения, а его даёт QDBusContext; держим это
+// здесь, чтобы заголовок FilePortal не тянул D-Bus на системы, где его нет
+class PortalReceiver : public QObject, public QDBusContext
+{
+    Q_OBJECT
+public:
+    explicit PortalReceiver(FilePortal *portal)
+        : QObject(portal)
+        , m_portal(portal)
+    {
+    }
+
+public Q_SLOTS:
+    void response(uint code, const QVariantMap &results) { m_portal->response(message().path(), code, results); }
+
+private:
+    FilePortal *m_portal;
+};
+
 FilePortal::FilePortal(QObject *parent)
     : QObject(parent)
+    , m_receiver(new PortalReceiver(this))
 {
     qDBusRegisterMetaType<FilterRule>();
     qDBusRegisterMetaType<QList<FilterRule>>();
     qDBusRegisterMetaType<Filter>();
     qDBusRegisterMetaType<QList<Filter>>();
+    // Сам портал может быть ещё не запущен — его поднимет первый вызов.
+    // Если и он не ответит, придёт failed и QML покажет окно Qt
+    m_available = QDBusConnection::sessionBus().isConnected();
 }
 
 void FilePortal::open(const QString &purpose, const QString &folder)
@@ -124,7 +152,7 @@ void FilePortal::request(const QString &method, const QString &purpose, const QS
     const QString handle = QStringLiteral("/org/freedesktop/portal/desktop/request/%1/%2").arg(sender, token);
     options.insert(QStringLiteral("handle_token"), token);
     m_pending.insert(handle, purpose);
-    bus.connect(kService, handle, kRequest, QStringLiteral("Response"), this, SLOT(response(uint, QVariantMap)));
+    bus.connect(kService, handle, kRequest, QStringLiteral("Response"), m_receiver, SLOT(response(uint, QVariantMap)));
 
     QDBusMessage msg = QDBusMessage::createMethodCall(kService, kPath, kChooser, method);
     msg << QString() << title << options;
@@ -134,8 +162,8 @@ void FilePortal::request(const QString &method, const QString &purpose, const QS
         QDBusPendingReply<QDBusObjectPath> reply = *w;
         if (reply.isError()) {
             m_pending.remove(handle);
-            QDBusConnection::sessionBus().disconnect(kService, handle, kRequest, QStringLiteral("Response"), this,
-                                                     SLOT(response(uint, QVariantMap)));
+            QDBusConnection::sessionBus().disconnect(kService, handle, kRequest, QStringLiteral("Response"),
+                                                     m_receiver, SLOT(response(uint, QVariantMap)));
             emit failed(purpose, reply.error().message());
             return;
         }
@@ -143,17 +171,16 @@ void FilePortal::request(const QString &method, const QString &purpose, const QS
         const QString actual = reply.value().path();
         if (actual != handle && !m_pending.contains(actual)) {
             m_pending.insert(actual, purpose);
-            QDBusConnection::sessionBus().connect(kService, actual, kRequest, QStringLiteral("Response"), this,
-                                                  SLOT(response(uint, QVariantMap)));
+            QDBusConnection::sessionBus().connect(kService, actual, kRequest, QStringLiteral("Response"),
+                                                  m_receiver, SLOT(response(uint, QVariantMap)));
         }
     });
 }
 
-void FilePortal::response(uint code, const QVariantMap &results)
+void FilePortal::response(const QString &handle, uint code, const QVariantMap &results)
 {
-    const QString handle = message().path();
     const QString purpose = m_pending.take(handle);
-    QDBusConnection::sessionBus().disconnect(kService, handle, kRequest, QStringLiteral("Response"), this,
+    QDBusConnection::sessionBus().disconnect(kService, handle, kRequest, QStringLiteral("Response"), m_receiver,
                                              SLOT(response(uint, QVariantMap)));
     if (purpose.isEmpty())
         return;
@@ -173,3 +200,43 @@ void FilePortal::response(uint code, const QVariantMap &results)
     else
         emit chosen(purpose, paths);
 }
+
+#include "FilePortal.moc"
+
+#else // без D-Bus портала нет: каждый запрос сразу «не удался», QML покажет окно Qt
+
+class PortalReceiver
+{
+};
+
+FilePortal::FilePortal(QObject *parent)
+    : QObject(parent)
+{
+}
+
+void FilePortal::request(const QString &, const QString &purpose, const QString &, QVariantMap)
+{
+    // Асинхронно, как настоящий ответ: QML успевает запомнить, чего ждёт
+    QTimer::singleShot(0, this, [this, purpose] { emit failed(purpose, QStringLiteral("портала нет")); });
+}
+
+void FilePortal::open(const QString &purpose, const QString &folder)
+{
+    request({}, purpose, folder, {});
+}
+
+void FilePortal::openFolder(const QString &purpose, const QString &folder)
+{
+    request({}, purpose, folder, {});
+}
+
+void FilePortal::save(const QString &purpose, const QString &folder, const QString &)
+{
+    request({}, purpose, folder, {});
+}
+
+void FilePortal::response(const QString &, uint, const QVariantMap &)
+{
+}
+
+#endif

@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Dialogs
 import QtQuick.Layouts
 import Jot
 
@@ -129,7 +130,7 @@ Window {
 
     // ── Файлы ────────────────────────────────────────────────────────
     function openPath(path) {
-        if (folders.isDir(path)) { openFolder(path, true); return }
+        if (Platform.isDir(path)) { openFolder(path, true); return }
         var ed = tabOf(path)
         if (ed) { switchTo(ed); return }
         // Чистый безымянный лист занимаем, а не плодим рядом новую вкладку
@@ -138,7 +139,66 @@ Window {
         if (ed.document.load(path)) switchTo(ed)
         else if (!reuse) dropTab(ed)
     }
-    function openDoc() { FilePortal.open("open", doc.folder) }
+    // ── Окна выбора файлов ───────────────────────────────────────────
+    // На Linux — портал (с бэкендом Shelf это окно Shelf), иначе и если портал
+    // не ответил — обычное окно Qt, на Windows оно системное
+    property var pendingChoice: null
+    function choose(purpose, folder, name) {
+        pendingChoice = { purpose: purpose, folder: folder || "", name: name || "" }
+        if (!FilePortal.available) { showDialog(); return }
+        if (purpose === "open") FilePortal.open(purpose, folder)
+        else if (purpose === "saveAs") FilePortal.save(purpose, folder, name)
+        else FilePortal.openFolder(purpose, folder)
+    }
+    function showDialog() {
+        var c = pendingChoice
+        if (!c) return
+        if (c.purpose === "folder") {
+            folderDialog.currentFolder = Platform.fileUrl(c.folder)
+            folderDialog.open()
+        } else if (c.purpose === "saveAs") {
+            saveDialog.currentFolder = Platform.fileUrl(c.folder)
+            saveDialog.selectedFile = Platform.fileUrl((c.folder || "") + "/" + c.name)
+            saveDialog.open()
+        } else {
+            openDialog.currentFolder = Platform.fileUrl(c.folder)
+            openDialog.open()
+        }
+    }
+    function urlsToPaths(urls) {
+        var out = []
+        for (var i = 0; i < urls.length; ++i) {
+            var p = Platform.localPath(urls[i])
+            if (p !== "") out.push(p)
+        }
+        return out
+    }
+    readonly property var noteFilters: ["Markdown (*.md *.markdown *.mdown)", "Текст (*.txt)", "Все файлы (*)"]
+    FileDialog {
+        id: openDialog
+        title: "Открыть"
+        fileMode: FileDialog.OpenFiles
+        nameFilters: win.noteFilters
+        onAccepted: win.handleChosen("open", win.urlsToPaths(selectedFiles))
+        onRejected: win.handleCancelled()
+    }
+    FileDialog {
+        id: saveDialog
+        title: "Сохранить"
+        fileMode: FileDialog.SaveFile
+        nameFilters: win.noteFilters
+        onAccepted: win.handleChosen("saveAs", win.urlsToPaths([selectedFile]))
+        onRejected: win.handleCancelled()
+    }
+    FolderDialog {
+        id: folderDialog
+        title: "Папка с заметками"
+        onAccepted: win.handleChosen("folder", win.urlsToPaths([selectedFolder]))
+        onRejected: win.handleCancelled()
+    }
+
+    function openDoc() { choose("open", doc.folder) }
+    function chooseFolder() { choose("folder", folders.root || doc.folder) }
     function save() {
         if (doc.untitled) saveAs(tab, null)
         else doc.save()
@@ -150,7 +210,7 @@ Window {
         saveAsTab = ed
         afterSave = then
         var d = ed.document
-        FilePortal.save("saveAs", d.folder, d.untitled ? d.name.replace(/[\/…]/g, "").trim() + ".md" : d.name)
+        choose("saveAs", d.folder, d.untitled ? d.name.replace(/[\/…]/g, "").trim() + ".md" : d.name)
     }
 
     function askDisk(ed) {
@@ -161,33 +221,38 @@ Window {
                      "Оставить мои", function () { ed.document.save() })
     }
 
-    Connections {
-        target: FilePortal
-        function onChosen(purpose, paths) {
-            if (purpose === "open") {
-                paths.forEach(win.openPath)
-            } else if (purpose === "folder") {
-                win.openFolder(paths[0], true)
-            } else if (purpose === "saveAs" && win.saveAsTab) {
-                var path = paths[0]
-                // Расширение подставляем сами, если в окне его стёрли
-                if (path.indexOf(".", path.lastIndexOf("/")) < 0) path += ".md"
-                var then = win.afterSave
-                var ok = win.saveAsTab.document.saveAs(path)
-                win.saveAsTab = null
-                win.afterSave = null
-                if (ok) {
-                    win.saveSession()
-                    if (then) then()
-                }
-            }
-        }
-        function onCancelled(purpose) { win.saveAsTab = null; win.afterSave = null }
-        function onFailed(purpose, message) {
+    function handleChosen(purpose, paths) {
+        pendingChoice = null
+        if (paths.length === 0) { handleCancelled(); return }
+        if (purpose === "open") {
+            paths.forEach(win.openPath)
+        } else if (purpose === "folder") {
+            win.openFolder(paths[0], true)
+        } else if (purpose === "saveAs" && win.saveAsTab) {
+            var path = paths[0]
+            // Расширение подставляем сами, если в окне его стёрли
+            if (path.indexOf(".", path.lastIndexOf("/")) < 0) path += ".md"
+            var then = win.afterSave
+            var ok = win.saveAsTab.document.saveAs(path)
             win.saveAsTab = null
             win.afterSave = null
-            toast.show("Окно выбора файлов недоступно: " + message)
+            if (ok) {
+                win.saveSession()
+                if (then) then()
+            }
         }
+    }
+    function handleCancelled() {
+        pendingChoice = null
+        saveAsTab = null
+        afterSave = null
+    }
+    Connections {
+        target: FilePortal
+        function onChosen(purpose, paths) { win.handleChosen(purpose, paths) }
+        function onCancelled(purpose) { win.handleCancelled() }
+        // Портал не ответил — то же самое через окно Qt
+        function onFailed(purpose, message) { win.showDialog() }
     }
 
     // Другой `jot файл.md` передал файлы сюда
@@ -262,7 +327,7 @@ Window {
     Shortcut { sequences: ["Ctrl+Shift+Tab", "Ctrl+Backtab", "Ctrl+PgUp"]; onActivated: win.cycleTab(-1) }
     Shortcut { sequence: "Ctrl+Q"; onActivated: win.close() }
     Shortcut { sequence: "F9"; onActivated: { win.sidebarShown = !win.sidebarVisible; win.saveSession() } }
-    Shortcut { sequence: "Ctrl+Shift+O"; onActivated: FilePortal.openFolder("folder", folders.root || win.doc.folder) }
+    Shortcut { sequence: "Ctrl+Shift+O"; onActivated: win.chooseFolder() }
     Shortcut { sequence: "Ctrl+B"; onActivated: win.tab.wrap("**") }
     Shortcut { sequence: "Ctrl+I"; onActivated: win.tab.wrap("*") }
     Shortcut { sequence: "Ctrl+E"; onActivated: win.tab.wrap("`") }
@@ -304,7 +369,7 @@ Window {
             pinned: win.folderPinned
             currentPath: win.doc.path
             onOpenFile: (p) => win.openPath(p)
-            onChooseFolder: FilePortal.openFolder("folder", folders.root || win.doc.folder)
+            onChooseFolder: win.chooseFolder()
             onNewNote: win.newNote()
             onTogglePin: win.togglePin()
         }
@@ -376,7 +441,7 @@ Window {
                 Text {
                     anchors { left: parent.left; leftMargin: 16; right: stats.left; rightMargin: 16
                               verticalCenter: parent.verticalCenter }
-                    text: win.doc.untitled ? "не сохранён" : win.doc.path.replace(/^\/home\/[^/]+/, "~")
+                    text: win.doc.untitled ? "не сохранён" : Platform.prettyPath(win.doc.path)
                     color: Theme.overlay1
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize - 3
@@ -400,10 +465,7 @@ Window {
         anchors.fill: parent
         keys: ["text/uri-list"]
         onDropped: (drop) => {
-            drop.urls.forEach(function (u) {
-                var s = u.toString()
-                if (s.startsWith("file://")) win.openPath(decodeURIComponent(s.substring(7)))
-            })
+            win.urlsToPaths(drop.urls).forEach(win.openPath)
             drop.acceptProposedAction()
         }
     }

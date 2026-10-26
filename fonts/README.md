@@ -1,4 +1,9 @@
-# Jot Icons
+# Шрифты
+
+`JetBrainsMono-*.otf` — JetBrains Mono 2.304 (Regular, Italic, SemiBold, Bold, BoldItalic): текст
+dокумента и интерфейс. Вшит, чтобы Jot выглядел одинаково на любом дистрибутиве и на Windows.
+
+## Jot Icons
 
 `JotIcons.ttf` и `JotIconsPropo.ttf` — только те символы, что Jot рисует в интерфейсе
 (кнопки, диалоги), вырезанные из JetBrainsMono Nerd Font (обычный вариант и Propo) скриптом

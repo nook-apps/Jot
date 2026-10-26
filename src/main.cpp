@@ -30,9 +30,11 @@ int main(int argc, char *argv[])
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("io.github.nook_apps.Jot"),
                                        QIcon(QStringLiteral(":/qt/qml/Jot/data/icons/io.github.nook_apps.Jot.svg"))));
 
-    // Значки интерфейса — вшитые символы Nerd Font: не зависим от установленных шрифтов
-    QFontDatabase::addApplicationFont(QStringLiteral(":/qt/qml/Jot/fonts/JotIcons.ttf"));
-    QFontDatabase::addApplicationFont(QStringLiteral(":/qt/qml/Jot/fonts/JotIconsPropo.ttf"));
+    // Шрифты вшиты в программу: значки интерфейса (символы Nerd Font) и JetBrains Mono
+    // для текста — на Windows и в чистом дистрибутиве их нет, а вид должен быть один
+    for (const char *file : {"JotIcons.ttf", "JotIconsPropo.ttf", "JetBrainsMono-Regular.otf", "JetBrainsMono-Italic.otf",
+                             "JetBrainsMono-SemiBold.otf", "JetBrainsMono-Bold.otf", "JetBrainsMono-BoldItalic.otf"})
+        QFontDatabase::addApplicationFont(QStringLiteral(":/qt/qml/Jot/fonts/") + QLatin1String(file));
 
     // qt6ct кладёт в шрифт приложения имя начертания («Regular»), его наследуют
     // все шрифты, и оно перебивает жирность: font.bold и жирное в тексте
@@ -59,7 +61,7 @@ int main(int argc, char *argv[])
     if (Instance::forward(files))
         return 0;
     Instance instance(nullptr);
-    instance.registerOnBus();
+    instance.listen();
 
     QQmlApplicationEngine engine;
     engine.setInitialProperties({{QStringLiteral("startFiles"), files}});

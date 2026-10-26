@@ -45,8 +45,6 @@ public:
     // Новая пустая заметка в папке dir: «Новая заметка.md», «Новая заметка 2.md»…
     // Возвращает путь или пустую строку, если создать не удалось
     Q_INVOKABLE QString createNote(const QString &dir);
-    // QML сам не умеет спросить файловую систему: jot ~/notes — это папка, а не файл
-    Q_INVOKABLE bool isDir(const QString &path) const;
 
 signals:
     void rootChanged();

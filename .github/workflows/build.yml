@@ -1,0 +1,54 @@
+# Каждый пуш и пул-реквест: сборка в двух несхожих дистрибутивах (Fedora и Arch)
+# и отдельно — без D-Bus, то есть так, как Jot собирается на Windows
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  linux:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Fedora 43
+            image: fedora:43
+            deps: dnf -y -q install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils binutils
+            flags: ""
+          - name: Arch Linux
+            image: archlinux:latest
+            deps: pacman -Syu --noconfirm --needed cmake ninja gcc qt6-base qt6-declarative desktop-file-utils binutils
+            flags: ""
+          - name: Fedora 43 без D-Bus (как на Windows)
+            image: fedora:43
+            deps: dnf -y -q install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils binutils
+            flags: -DJOT_WITH_DBUS=OFF
+    steps:
+      - uses: actions/checkout@v4
+      - name: Зависимости
+        run: ${{ matrix.deps }}
+      - name: Сборка
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr ${{ matrix.flags }}
+          cmake --build build
+          ./build/jot --version
+      # Без D-Bus — значит без него и в зависимостях: иначе на Windows не соберётся
+      - name: Без Qt6DBus в зависимостях
+        if: matrix.flags != ''
+        run: "! readelf -d build/jot | grep -q Qt6DBus"
+      - name: Проверка QML
+        run: cmake --build build --target all_qmllint
+      - name: Ярлык
+        run: desktop-file-validate build/io.github.nook_apps.Jot.desktop
+      - name: Установка
+        run: |
+          DESTDIR="$PWD/stage" cmake --install build
+          find stage -type f | sort

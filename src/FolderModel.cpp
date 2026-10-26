@@ -226,11 +226,6 @@ int FolderModel::reveal(const QString &path)
     return indexOf(path);
 }
 
-bool FolderModel::isDir(const QString &path) const
-{
-    return QFileInfo(path).isDir();
-}
-
 QString FolderModel::createNote(const QString &dir)
 {
     const QString base = dir.isEmpty() ? m_root : dir;

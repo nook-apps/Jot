@@ -108,7 +108,9 @@ QtObject {
 
     // ── Размеры ─────────────────────────────────────────────────────
     readonly property int widgetRadius: material ? 12 : 8
-    readonly property string fontFamily: material ? "Google Sans Flex" : "JetBrainsMono Nerd Font"
+    // В стекле — вшитый JetBrains Mono (буквы те же, что у Nerd Font, а значки
+    // берутся из своего шрифта); Google Sans Flex, если его нет, Qt заменит системным
+    readonly property string fontFamily: material ? "Google Sans Flex" : "JetBrains Mono"
     // Вшитые в программу (fonts/), вырезаны из тех же JetBrainsMono Nerd Font и Propo
     readonly property string iconFont:   material ? "Jot Icons Propo" : "Jot Icons"
     readonly property int    fontSize:   14

@@ -7,6 +7,7 @@
 #include <QIcon>
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
+#include <QQuickWindow>
 #include <QTextStream>
 #include <QUrl>
 
@@ -47,6 +48,10 @@ int main(int argc, char *argv[])
 
     // Свои контролы рисуем сами; Basic не тянет вид qt6ct/kvantum
     QQuickStyle::setStyle(QStringLiteral("Basic"));
+#ifdef Q_OS_WIN
+    // Без альфа-канала окно на Windows непрозрачное, и фон Acrylic под ним не виден
+    QQuickWindow::setDefaultAlphaBuffer(true);
+#endif
 
     // jot [файлы…] — нет такого файла — откроется пустой с этим именем, создастся при сохранении
     QStringList files;

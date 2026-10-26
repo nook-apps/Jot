@@ -1,11 +1,12 @@
 #include "ThemeSource.h"
 
+#include "Backdrop.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QProcess>
 #include <QSettings>
 #include <QGuiApplication>
 #include <QStandardPaths>
@@ -215,24 +216,14 @@ QVariantMap ThemeSource::paletteFor(const QString &id) const
 
 QVariantMap ThemeSource::glassSettings()
 {
-    // Основа — настройки стекла шелла, как раньше; своих нет — по размытию Hyprland
+    // Основа — настройки стекла шелла, как раньше; своих нет — есть ли размытие под окном
     QVariantMap s;
     if (QFileInfo::exists(qsSettingsFile())) {
         s = readJson(qsSettingsFile());
         if (s.isEmpty())
             return m_settings; // файл в процессе записи
     } else {
-        if (m_hyprBlur < 0) {
-            m_hyprBlur = 0;
-            if (!qEnvironmentVariableIsEmpty("HYPRLAND_INSTANCE_SIGNATURE")) {
-                QProcess p;
-                p.start(QStringLiteral("hyprctl"), {QStringLiteral("-j"), QStringLiteral("getoption"),
-                                                   QStringLiteral("decoration:blur:enabled")});
-                if (p.waitForFinished(1000))
-                    m_hyprBlur = QJsonDocument::fromJson(p.readAllStandardOutput()).object().value(QStringLiteral("int")).toInt();
-            }
-        }
-        s[QStringLiteral("glass")] = m_hyprBlur == 1;
+        s[QStringLiteral("glass")] = Backdrop::available();
     }
     const QSettings own;
     if (own.contains(QStringLiteral("theme/glass")))

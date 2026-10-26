@@ -14,9 +14,17 @@ Window {
     minimumWidth: 480
     minimumHeight: 320
     visible: true
-    // Прозрачный фон — Hyprland размоет то, что под окном, как у Shelf
+    // Прозрачный фон — композитор размоет то, что под окном (Backdrop)
     color: "transparent"
     title: (doc.modified ? "• " : "") + doc.name + " — Jot"
+
+    // Просим размытие, как только окно появилось, и заново при смене стекла или темы
+    function applyBackdrop() { Backdrop.apply(win, !Theme.material, !Theme.light) }
+    Connections {
+        target: Theme
+        function onMaterialChanged() { win.applyBackdrop() }
+        function onLightChanged() { win.applyBackdrop() }
+    }
 
     // ── Вкладки ──────────────────────────────────────────────────────
     // Editor в порядке полоски; tab и doc — текущей вкладки
@@ -288,6 +296,7 @@ Window {
     Timer { id: sessionTimer; interval: 800; onTriggered: win.writeSession() }
 
     Component.onCompleted: {
+        Qt.callLater(win.applyBackdrop)
         var s = Session.load()
         folders.expanded = s.expanded || []
         folders.root = s.folder || ""

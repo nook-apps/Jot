@@ -1,5 +1,5 @@
-# Каждый пуш и пул-реквест: сборка в двух несхожих дистрибутивах (Fedora и Arch)
-# и отдельно — без D-Bus, то есть так, как Jot собирается на Windows
+# Каждый пуш и пул-реквест: сборка в двух несхожих дистрибутивах (Fedora и Arch),
+# отдельно — без D-Bus и KF6 (минимальный Linux), и на Windows — с zip для проверки руками
 name: build
 
 on:
@@ -21,16 +21,16 @@ jobs:
         include:
           - name: Fedora 43
             image: fedora:43
-            deps: dnf -y -q install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils binutils
+            deps: dnf -y -q install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kwindowsystem-devel desktop-file-utils binutils
             flags: ""
           - name: Arch Linux
             image: archlinux:latest
-            deps: pacman -Syu --noconfirm --needed cmake ninja gcc qt6-base qt6-declarative desktop-file-utils binutils
+            deps: pacman -Syu --noconfirm --needed cmake ninja gcc extra-cmake-modules qt6-base qt6-declarative kwindowsystem desktop-file-utils binutils
             flags: ""
-          - name: Fedora 43 без D-Bus (как на Windows)
+          - name: Fedora 43 без D-Bus и KF6
             image: fedora:43
             deps: dnf -y -q install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils binutils
-            flags: -DJOT_WITH_DBUS=OFF
+            flags: -DJOT_WITH_DBUS=OFF -DJOT_WITH_KWINDOWSYSTEM=OFF
     steps:
       - uses: actions/checkout@v4
       - name: Зависимости
@@ -40,10 +40,14 @@ jobs:
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr ${{ matrix.flags }}
           cmake --build build
           ./build/jot --version
-      # Без D-Bus — значит без него и в зависимостях: иначе на Windows не соберётся
-      - name: Без Qt6DBus в зависимостях
-        if: matrix.flags != ''
-        run: "! readelf -d build/jot | grep -q Qt6DBus"
+      # Полная сборка просит размытие у KWin и других; минимальная не тянет ни D-Bus, ни KF6
+      - name: Зависимости бинарника
+        run: |
+          if [ -z "${{ matrix.flags }}" ]; then
+            readelf -d build/jot | grep -q KF6WindowSystem
+          else
+            ! readelf -d build/jot | grep -qE 'Qt6DBus|KF6'
+          fi
       - name: Проверка QML
         run: cmake --build build --target all_qmllint
       - name: Ярлык
@@ -52,3 +56,30 @@ jobs:
         run: |
           DESTDIR="$PWD/stage" cmake --install build
           find stage -type f | sort
+
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          arch: win64_msvc2022_64
+          cache: true
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Сборка
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+      # Папка с jot.exe и всем Qt рядом — скачать из Actions и запустить на любой Windows
+      - name: Сборка папки
+        run: |
+          mkdir dist
+          copy build\jot.exe dist\
+          windeployqt --release --qmldir qml --no-translations dist\jot.exe
+        shell: cmd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jot-windows-x64
+          path: dist

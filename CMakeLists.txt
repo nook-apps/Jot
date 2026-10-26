@@ -22,6 +22,17 @@ if(UNIX AND NOT APPLE AND JOT_WITH_DBUS)
     find_package(Qt6 REQUIRED COMPONENTS DBus)
     set(JOT_DBUS ON)
 endif()
+# Размытие под окном в KDE, GNOME 51+, niri (ext-background-effect-v1) и KWin на X11.
+# Нет библиотеки — Jot соберётся и так, просто там будет непрозрачным
+option(JOT_WITH_KWINDOWSYSTEM "Размытие под окном через KF6 WindowSystem (Linux)" ON)
+if(UNIX AND NOT APPLE AND JOT_WITH_KWINDOWSYSTEM)
+    find_package(KF6WindowSystem QUIET)
+    if(KF6WindowSystem_FOUND)
+        set(JOT_KWINDOWSYSTEM ON)
+    else()
+        message(STATUS "KF6WindowSystem не найден: размытие только в Hyprland")
+    endif()
+endif()
 qt_standard_project_setup(REQUIRES 6.7)
 
 qt_add_executable(jot src/main.cpp)
@@ -64,6 +75,7 @@ qt_add_qml_module(jot
         src/platform/Instance.h src/platform/Instance.cpp
         src/platform/FilePortal.h src/platform/FilePortal.cpp
         src/platform/ThemeSource.h src/platform/ThemeSource.cpp
+        src/platform/Backdrop.h src/platform/Backdrop.cpp
 )
 
 # QML компилируется только в байт-код, без C++ для привязок (AOT): сгенерированный C++
@@ -77,6 +89,13 @@ target_link_libraries(jot PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Network)
 if(JOT_DBUS)
     target_link_libraries(jot PRIVATE Qt6::DBus)
     target_compile_definitions(jot PRIVATE JOT_HAVE_DBUS)
+endif()
+if(JOT_KWINDOWSYSTEM)
+    target_link_libraries(jot PRIVATE KF6::WindowSystem)
+    target_compile_definitions(jot PRIVATE JOT_HAVE_KWINDOWSYSTEM)
+endif()
+if(WIN32)
+    target_link_libraries(jot PRIVATE dwmapi)
 endif()
 if(MSVC)
     target_compile_options(jot PRIVATE /W4 /utf-8)

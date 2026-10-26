@@ -21,7 +21,7 @@
 //   system    — встроенная светлая или тёмная, как color-scheme в портале
 //   light, dark — встроенная, всегда такая
 // Стекло: своя настройка [theme] glass/glassAlpha, иначе ~/.config/quickshell/settings.json,
-// иначе — включено, если в Hyprland включено размытие.
+// иначе — включено, если окружение умеет размывать под окном (Backdrop).
 class ThemeSource : public QObject
 {
     Q_OBJECT
@@ -85,7 +85,6 @@ private:
     bool m_systemDark = true;
     // Светлую/тёмную сообщил портал — тогда его и слушаем, а не Qt
     bool m_portalScheme = false;
-    int m_hyprBlur = -1; // -1 — ещё не спрашивали hyprctl
     QFileSystemWatcher m_watcher;
     QTimer m_debounce;
 };

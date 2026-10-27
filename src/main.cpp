@@ -1,15 +1,16 @@
+#include "Glaze.h"
 #include "Instance.h"
 
 #include <QFileInfo>
-#include <QFont>
-#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QIcon>
 #include <QQmlApplicationEngine>
-#include <QQuickStyle>
-#include <QQuickWindow>
+#include <QQmlExtensionPlugin>
 #include <QTextStream>
 #include <QUrl>
+
+// Glaze собран статически — его QML-модуль подключаем явно
+Q_IMPORT_QML_PLUGIN(GlazePlugin)
 
 int main(int argc, char *argv[])
 {
@@ -31,27 +32,14 @@ int main(int argc, char *argv[])
     app.setWindowIcon(QIcon::fromTheme(QStringLiteral("io.github.nook_apps.Jot"),
                                        QIcon(QStringLiteral(":/qt/qml/Jot/data/icons/io.github.nook_apps.Jot.svg"))));
 
-    // Шрифты вшиты в программу: значки интерфейса (символы Nerd Font) и JetBrains Mono
-    // для текста — на Windows и в чистом дистрибутиве их нет, а вид должен быть один
-    for (const char *file : {"JotIcons.ttf", "JotIconsPropo.ttf", "JetBrainsMono-Regular.otf", "JetBrainsMono-Italic.otf",
-                             "JetBrainsMono-SemiBold.otf", "JetBrainsMono-Bold.otf", "JetBrainsMono-BoldItalic.otf"})
-        QFontDatabase::addApplicationFont(QStringLiteral(":/qt/qml/Jot/fonts/") + QLatin1String(file));
-
-    // qt6ct кладёт в шрифт приложения имя начертания («Regular»), его наследуют
-    // все шрифты, и оно перебивает жирность: font.bold и жирное в тексте
-    // рисовались бы обычным. Начертание выбираем по весу сами
-    QFont font = QGuiApplication::font();
-    if (!font.styleName().isEmpty()) {
-        font.setStyleName(QString());
-        QGuiApplication::setFont(font);
-    }
-
-    // Свои контролы рисуем сами; Basic не тянет вид qt6ct/kvantum
-    QQuickStyle::setStyle(QStringLiteral("Basic"));
-#ifdef Q_OS_WIN
-    // Без альфа-канала окно на Windows непрозрачное, и фон Acrylic под ним не виден
-    QQuickWindow::setDefaultAlphaBuffer(true);
-#endif
+    // Фиолетовый Jot из дизайн-системы (jot / jot-deep) и свой шрифт значков:
+    // символы Nerd Font, которые рисуют Jot и контролы Glaze, вшиты в программу
+    Glaze::setup({
+        .brand = QColor(0xb4, 0x8c, 0xff),
+        .brandDeep = QColor(0x8b, 0x5c, 0xf6),
+        .iconFamily = QStringLiteral("Jot Icons"),
+        .fonts = {QStringLiteral(":/qt/qml/Jot/fonts/JotIcons.ttf"), QStringLiteral(":/qt/qml/Jot/fonts/JotIconsPropo.ttf")},
+    });
 
     // jot [файлы…] — нет такого файла — откроется пустой с этим именем, создастся при сохранении
     QStringList files;

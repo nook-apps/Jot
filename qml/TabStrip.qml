@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Glaze
 import Jot
 
 // Полоска вкладок, как у Shelf: тянутся мышью, средняя кнопка закрывает.
@@ -144,7 +145,7 @@ Item {
                 Rectangle {
                     anchors.centerIn: parent
                     width: 7; height: 7; radius: 3.5
-                    color: Theme.jot
+                    color: Theme.brand
                     visible: tabItem.doc.modified && !closeBtn.hovered
                 }
                 MouseArea {

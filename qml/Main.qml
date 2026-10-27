@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Dialogs
 import QtQuick.Layouts
+import Glaze
 import Jot
 
 Window {
@@ -406,7 +407,7 @@ Window {
                 GlassButton {
                     text: "\u{f0c7}"
                     tooltip: "Сохранить  Ctrl+S"
-                    accentColor: Theme.jot
+                    accentColor: Theme.brand
                     active: win.doc.modified
                     onClicked: win.save()
                 }

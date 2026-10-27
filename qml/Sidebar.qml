@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Controls.Basic
+import Glaze
 import Jot
 
 // Боковая панель: дерево заметок одной папки, как места в Shelf.

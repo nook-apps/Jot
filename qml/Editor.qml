@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls.Basic
+import Glaze
 import Jot
 
 // Поле редактора — одна вкладка: колонка текста по центру окна, прокрутка — на всю
@@ -31,7 +32,7 @@ FocusScope {
             subtext: Theme.subtext0,
             marker: Theme.overlay0,
             markerActive: Theme.overlay2,
-            accent: Theme.jot,
+            accent: Theme.brand,
             link: Theme.blue,
             code: Theme.subtext1,
             codeBg: Theme.ink(0.07)
@@ -73,7 +74,7 @@ FocusScope {
             font.pixelSize: Theme.editorSize
             selectByMouse: true
             persistentSelection: true
-            selectionColor: Qt.rgba(Theme.jot.r, Theme.jot.g, Theme.jot.b, 0.32)
+            selectionColor: Qt.rgba(Theme.brand.r, Theme.brand.g, Theme.brand.b, 0.32)
             selectedTextColor: Theme.text
             placeholderText: "Начните писать…"
             placeholderTextColor: Theme.overlay1
@@ -82,7 +83,7 @@ FocusScope {
             // Фирменный курсор: тонкая фиолетовая черта, мигает мягко
             cursorDelegate: Rectangle {
                 width: 2
-                color: Theme.jot
+                color: Theme.brand
                 radius: 1
                 visible: edit.activeFocus
                 SequentialAnimation on opacity {

@@ -30,9 +30,11 @@ jobs:
           - name: Fedora 43 без D-Bus и KF6
             image: fedora:43
             deps: dnf -y -q install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils binutils
-            flags: -DJOT_WITH_DBUS=OFF -DJOT_WITH_KWINDOWSYSTEM=OFF
+            flags: -DGLAZE_WITH_DBUS=OFF -DGLAZE_WITH_KWINDOWSYSTEM=OFF
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - name: Зависимости
         run: ${{ matrix.deps }}
       - name: Сборка
@@ -62,6 +64,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true
       - uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
@@ -77,7 +81,7 @@ jobs:
         run: |
           mkdir dist
           copy build\jot.exe dist\
-          windeployqt --release --qmldir qml --no-translations dist\jot.exe
+          windeployqt --release --qmldir qml --qmldir glaze\qml --no-translations dist\jot.exe
         shell: cmd
       - uses: actions/upload-artifact@v4
         with:

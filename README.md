@@ -128,6 +128,7 @@ sudo dnf install qt6-qtbase-devel qt6-qtdeclarative-devel cmake ninja-build gcc-
 # Arch
 sudo pacman -S qt6-base qt6-declarative cmake ninja
 
+git clone --recursive https://github.com/nook-apps/Jot && cd Jot
 cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=~/.local
 cmake --build build
 cmake --install build
@@ -140,7 +141,7 @@ cmake --install build
 ставить отдельно ничего не нужно.
 
 D-Bus нужен только на Linux: через него работают портал выбора файлов и светлая/тёмная тема
-из портала. Без него (`-DJOT_WITH_DBUS=OFF`, так же собирается Windows) Jot берёт окна выбора
+из портала. Без него (`-DGLAZE_WITH_DBUS=OFF`, так же собирается Windows) Jot берёт окна выбора
 и тему у Qt, а одно окно на сеанс держит через локальный сокет — он работает везде.
 
 Сделать Jot редактором Markdown по умолчанию:
@@ -186,25 +187,25 @@ Hyprland включено размытие.
 - [ ] оглавление по заголовкам, поиск и замена
 - [ ] настройки (<kbd>Ctrl</kbd>+<kbd>,</kbd>): источник цветов, стекло, автосохранение
 
-Дальше — пакеты для Fedora, Debian/Ubuntu, Arch и Nix, как у Shelf, и общий модуль интерфейса
-Plain, когда появится второе офисное приложение.
+Дальше — пакеты для Fedora, Debian/Ubuntu, Arch и Nix, как у Shelf.
 
 ## 🗂️ Структура
 
 ```
 src/            C++: документ (загрузка, сохранение, слежение за файлом), подсветка
                 markdown, сессия, дерево папки
-src/platform/   всё, что на разных системах устроено по-разному: одно окно на сеанс
-                (локальный сокет), окна выбора файлов (портал или Qt), источник темы, пути
-qml/            интерфейс: окно, вкладки, панель папки, редактор, кнопки и диалоги, тема
-fonts/          вшитые шрифты: JetBrains Mono и значки интерфейса (из JetBrainsMono Nerd Font)
-tools/          subset_icons.py — сборка шрифта значков
+qml/            интерфейс: окно, вкладки, панель папки, редактор
+glaze/          сабмодуль Glaze — общий модуль приложений Nook: тема, стекло, кнопки и
+                диалоги, JetBrains Mono и всё, что на разных системах устроено по-разному:
+                одно окно на сеанс (локальный сокет), окна выбора файлов (портал или Qt),
+                источник темы, размытие под окном, пути
+fonts/          значки интерфейса Jot (из JetBrainsMono Nerd Font)
 data/           шаблон .desktop-файла, иконка приложения
 docs/           картинки и пример для README
 ```
 
-Тема (`qml/Theme.qml`, `src/ThemeSource.*`), кнопки и диалоги пока скопированы из Shelf; общим
-модулем они станут вместе со вторым приложением Plain.
+Тема, кнопки и диалоги живут в [Glaze](https://github.com/nook-apps/glaze) — их же получат Page
+и остальные приложения Plain.
 
 ## 📜 Благодарности
 
@@ -216,5 +217,5 @@ docs/           картинки и пример для README
 
 Jot распространяется под [GNU GPL v3](LICENSE) или более поздней версией (GPL-3.0-or-later).
 
-- Шрифты `fonts/` — JetBrains Mono и шрифт значков, SIL Open Font License 1.1 (`fonts/OFL.txt`);
+- Шрифт значков `fonts/` и JetBrains Mono в `glaze/fonts/` — SIL Open Font License 1.1 (`fonts/OFL.txt`);
   значки Nerd Fonts — MIT / OFL

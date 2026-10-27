@@ -9,48 +9,32 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set_property(GLOBAL PROPERTY JOB_POOLS compile=4)
 set(CMAKE_JOB_POOL_COMPILE compile)
 
-# 6.7 — из-за QStandardPaths::GenericStateLocation (~/.local/state).
-# Network — для QLocalServer (одно окно на сеанс)
-find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Quick QuickControls2 Network)
-
-# D-Bus — только на Linux: портал выбора файлов и светлая/тёмная тема из портала.
-# На Windows и macOS Jot собирается без него и берёт окна выбора и тему у Qt
-# -DJOT_WITH_DBUS=OFF собирает Linux-версию так, как её видит Windows: проверка
-# запасных путей без второй машины
-option(JOT_WITH_DBUS "Портал и тема через D-Bus (только Linux)" ON)
-if(UNIX AND NOT APPLE AND JOT_WITH_DBUS)
-    find_package(Qt6 REQUIRED COMPONENTS DBus)
-    set(JOT_DBUS ON)
-endif()
-# Размытие под окном в KDE, GNOME 51+, niri (ext-background-effect-v1) и KWin на X11.
-# Нет библиотеки — Jot соберётся и так, просто там будет непрозрачным
-option(JOT_WITH_KWINDOWSYSTEM "Размытие под окном через KF6 WindowSystem (Linux)" ON)
-if(UNIX AND NOT APPLE AND JOT_WITH_KWINDOWSYSTEM)
-    find_package(KF6WindowSystem QUIET)
-    if(KF6WindowSystem_FOUND)
-        set(JOT_KWINDOWSYSTEM ON)
-    else()
-        message(STATUS "KF6WindowSystem не найден: размытие только в Hyprland")
-    endif()
-endif()
+# 6.7 — из-за QStandardPaths::GenericStateLocation (~/.local/state)
+find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Quick QuickControls2)
 qt_standard_project_setup(REQUIRES 6.7)
+
+# QML-модули Jot и Glaze — в одной папке сборки, чтобы qmllint и qmlcachegen
+# находили import Glaze
+set(QT_QML_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/qml)
+
+# Общий модуль приложений Nook (сабмодуль): тема, стекло, кнопки и диалоги и всё,
+# что на разных системах устроено по-разному. Его ключи сборки: GLAZE_WITH_DBUS,
+# GLAZE_WITH_KWINDOWSYSTEM (см. glaze/CMakeLists.txt)
+if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/glaze/CMakeLists.txt)
+    message(FATAL_ERROR "Нет glaze/ — склонируйте с --recursive или: git submodule update --init")
+endif()
+add_subdirectory(glaze)
 
 qt_add_executable(jot src/main.cpp)
 
 set(QML_FILES
     qml/Main.qml
-    qml/Theme.qml
     qml/Editor.qml
     qml/TabStrip.qml
     qml/Sidebar.qml
-    qml/GlassButton.qml
-    qml/GlassDialog.qml
-    qml/TextButton.qml
-    qml/ConfirmDialog.qml
 )
-set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
-# Файлы лежат в qml/, но в модуле — в корне: иначе синглтон Theme
-# не виден из соседних файлов (неявный импорт идёт по каталогу файла)
+# Файлы лежат в qml/, но в модуле — в корне: неявный импорт соседей
+# идёт по каталогу файла
 foreach(f ${QML_FILES})
     get_filename_component(name ${f} NAME)
     set_source_files_properties(${f} PROPERTIES QT_RESOURCE_ALIAS ${name})
@@ -62,20 +46,12 @@ qt_add_qml_module(jot
     QML_FILES ${QML_FILES}
     RESOURCES
         fonts/JotIcons.ttf fonts/JotIconsPropo.ttf
-        fonts/JetBrainsMono-Regular.otf fonts/JetBrainsMono-Italic.otf fonts/JetBrainsMono-SemiBold.otf
-        fonts/JetBrainsMono-Bold.otf fonts/JetBrainsMono-BoldItalic.otf
         data/icons/io.github.nook_apps.Jot.svg
     SOURCES
         src/Document.h src/Document.cpp
         src/MarkdownHighlighter.h src/MarkdownHighlighter.cpp
         src/Session.h src/Session.cpp
         src/FolderModel.h src/FolderModel.cpp
-        # Всё, что на разных системах устроено по-разному. Уйдёт в общий модуль Glaze
-        src/platform/Platform.h src/platform/Platform.cpp
-        src/platform/Instance.h src/platform/Instance.cpp
-        src/platform/FilePortal.h src/platform/FilePortal.cpp
-        src/platform/ThemeSource.h src/platform/ThemeSource.cpp
-        src/platform/Backdrop.h src/platform/Backdrop.cpp
 )
 
 # QML компилируется только в байт-код, без C++ для привязок (AOT): сгенерированный C++
@@ -83,20 +59,9 @@ qt_add_qml_module(jot
 set_target_properties(jot PROPERTIES QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode")
 # На Windows — окно без консоли рядом
 set_target_properties(jot PROPERTIES WIN32_EXECUTABLE TRUE)
-target_include_directories(jot PRIVATE src src/platform)
+target_include_directories(jot PRIVATE src)
 target_compile_definitions(jot PRIVATE JOT_VERSION="${PROJECT_VERSION}")
-target_link_libraries(jot PRIVATE Qt6::Quick Qt6::QuickControls2 Qt6::Network)
-if(JOT_DBUS)
-    target_link_libraries(jot PRIVATE Qt6::DBus)
-    target_compile_definitions(jot PRIVATE JOT_HAVE_DBUS)
-endif()
-if(JOT_KWINDOWSYSTEM)
-    target_link_libraries(jot PRIVATE KF6::WindowSystem)
-    target_compile_definitions(jot PRIVATE JOT_HAVE_KWINDOWSYSTEM)
-endif()
-if(WIN32)
-    target_link_libraries(jot PRIVATE dwmapi)
-endif()
+target_link_libraries(jot PRIVATE Qt6::Quick Qt6::QuickControls2 glaze glazeplugin)
 if(MSVC)
     target_compile_options(jot PRIVATE /W4 /utf-8)
 else()

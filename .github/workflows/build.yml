@@ -21,22 +21,23 @@ jobs:
         include:
           - name: Fedora 43
             image: fedora:43
-            deps: dnf -y -q install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kwindowsystem-devel desktop-file-utils binutils
+            deps: dnf -y -q install git cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel kf6-kwindowsystem-devel desktop-file-utils binutils
             flags: ""
           - name: Arch Linux
             image: archlinux:latest
-            deps: pacman -Syu --noconfirm --needed cmake ninja gcc extra-cmake-modules qt6-base qt6-declarative kwindowsystem desktop-file-utils binutils
+            deps: pacman -Syu --noconfirm --needed git cmake ninja gcc extra-cmake-modules qt6-base qt6-declarative kwindowsystem desktop-file-utils binutils
             flags: ""
           - name: Fedora 43 без D-Bus и KF6
             image: fedora:43
-            deps: dnf -y -q install cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils binutils
+            deps: dnf -y -q install git cmake ninja-build gcc-c++ qt6-qtbase-devel qt6-qtdeclarative-devel desktop-file-utils binutils
             flags: -DGLAZE_WITH_DBUS=OFF -DGLAZE_WITH_KWINDOWSYSTEM=OFF
     steps:
+      # До checkout: без git в образе он качает архив через API, а сабмодули так не приходят
+      - name: Зависимости
+        run: ${{ matrix.deps }}
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - name: Зависимости
-        run: ${{ matrix.deps }}
       - name: Сборка
         run: |
           cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_PREFIX=/usr ${{ matrix.flags }}
